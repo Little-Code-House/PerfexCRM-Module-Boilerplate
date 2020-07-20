@@ -75,4 +75,29 @@ class Client_retainer extends AdminController
 
     redirect(admin_url(CLIENT_RETAINER_MODULE_NAME));
   }
+
+  public function process()
+  {
+    log_message('debug', 'START RETAINER PROCESSING');
+    $this->load->model('Clients_model');
+    $this->load->model('Tasks_model');
+    $clients = $this->Clients_model->get();
+    foreach ($clients as $client) {
+      $tasks = $this->Tasks_model->get_billable_tasks($client['userid']);
+      log_message('debug', print_r($tasks, true));
+      foreach ($tasks as $task) {
+        if ($task['datefinished']) {
+          $data = $this->Tasks_model->get_billable_task_data($task['id']);
+          log_message('debug', print_r($data, true));
+          $retainerIncluded = 'This is included in the clients retainer' == get_custom_field_value($task['id'], 'tasks_included_in_retainer', 'tasks');
+          log_message('debug', print_r($retainerIncluded, true));
+          if ($retainerIncluded) {
+            echo 'This will be invoiced';
+            print("<pre>" . print_r($data, true) . "</pre>");
+            die();
+          }
+        }
+      }
+    }
+  }
 }
