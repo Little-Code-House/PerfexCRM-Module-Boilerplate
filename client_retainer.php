@@ -20,9 +20,6 @@ hooks()->add_action('admin_init', 'client_retainer_init_menu_items');
 hooks()->add_action('after_add_task', 'callback_after_add_task_client_retainer');
 hooks()->add_action('after_update_task', 'callback_after_update_task_client_retainer');
 
-hooks()->add_filter('before_add_task', 'client_retainer_set_task_data');
-hooks()->add_filter('before_update_task', 'client_retainer_set_task_data');
-
 /**
  * Load the module helper
  */
@@ -82,6 +79,7 @@ function client_retainer_activation()
     $CI->db->query("CREATE TABLE `$tablename` (
     `tasks_id` INT(11) NOT NULL UNIQUE,
     `retainer_included` BOOLEAN NOT NULL,
+    `billable` BOOLEAN NOT NULL,
   CONSTRAINT `fk_{$tablename}_clients`
     FOREIGN KEY (tasks_id) REFERENCES `{$db_prefix}tasks` (id)
     ON DELETE CASCADE
@@ -136,11 +134,4 @@ function callback_after_update_task_client_retainer($id)
   $CI = &get_instance();
   $CI->load->model(CLIENT_RETAINER_MODULE_NAME . '/Client_retainer_task_model');
   $CI->Client_retainer_task_model->replace($id);
-}
-
-function client_retainer_set_task_data($data)
-{
-  $CI = &get_instance();
-  echo '<pre>' . print_r($CI->input->get(), true) . '</pre>';
-  die();
 }
