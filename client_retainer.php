@@ -14,7 +14,19 @@ Requires at least: 2.3.*
 
 defined('CLIENT_RETAINER_MODULE_NAME') or define('CLIENT_RETAINER_MODULE_NAME', 'client_retainer');
 
+$CI = &get_instance();
+
 hooks()->add_action('admin_init', 'client_retainer_init_menu_items');
+hooks()->add_action('after_add_task', 'callback_after_add_task_client_retainer');
+hooks()->add_action('after_update_task', 'callback_after_update_task_client_retainer');
+
+hooks()->add_filter('before_add_task', 'client_retainer_set_task_data');
+hooks()->add_filter('before_update_task', 'client_retainer_set_task_data');
+
+/**
+ * Load the module helper
+ */
+$CI->load->helper(CLIENT_RETAINER_MODULE_NAME . '/client_retainer');
 
 
 /**
@@ -49,26 +61,55 @@ function client_retainer_activation()
   $CI = &get_instance();
   $db_prefix = db_prefix();
 
-  $perfexTables = [
-    'clients' => 'userid',
-  ];
+  $moduleName = CLIENT_RETAINER_MODULE_NAME;
 
-  foreach ($perfexTables as $table => $id) {
-    $moduleName = CLIENT_RETAINER_MODULE_NAME;
-    $tablename = $db_prefix . $moduleName . '_' . $table;
-    if (!$CI->db->table_exists($tablename)) {
-      $CI->db->query("CREATE TABLE `$tablename` (
-    `{$table}_id` INT(11) NOT NULL UNIQUE,
+  $tablename = $db_prefix . $moduleName . '_clients';
+  if (!$CI->db->table_exists($tablename)) {
+    $CI->db->query("CREATE TABLE `$tablename` (
+    `clients_id` INT(11) NOT NULL UNIQUE,
     `rate` INT(11) NOT NULL,
     `hours` INT(11) NOT NULL,
-  CONSTRAINT `fk_{$tablename}_{$table}`
-    FOREIGN KEY ({$table}_id) REFERENCES `{$db_prefix}{$table}` ($id)
+  CONSTRAINT `fk_{$tablename}_clients`
+    FOREIGN KEY (clients_id) REFERENCES `{$db_prefix}clients` (userid)
     ON DELETE CASCADE
     ON UPDATE RESTRICT,
-    PRIMARY KEY ({$table}_id)
+    PRIMARY KEY (clients_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=\"{$CI->db->char_set}\";");
+  }
 
-    }
+  $tablename = $db_prefix . $moduleName . '_tasks';
+  if (!$CI->db->table_exists($tablename)) {
+    $CI->db->query("CREATE TABLE `$tablename` (
+    `tasks_id` INT(11) NOT NULL UNIQUE,
+    `retainer_included` BOOLEAN NOT NULL,
+  CONSTRAINT `fk_{$tablename}_clients`
+    FOREIGN KEY (tasks_id) REFERENCES `{$db_prefix}tasks` (id)
+    ON DELETE CASCADE
+    ON UPDATE RESTRICT,
+    PRIMARY KEY (tasks_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=\"{$CI->db->char_set}\";");
+  }
+
+  $tablename = $db_prefix . $moduleName . '_retainer_invoices';
+  if (!$CI->db->table_exists($tablename)) {
+    $CI->db->query("CREATE TABLE `$tablename` (
+    `id` INT(11) NOT NULL AUTO_INCREMENT,
+    `invoices_id` INT(11),
+    `clients_id` INT(11) NOT NULL,
+    `year` INT(4) NOT NULL,
+    `month` INT(2) NOT NULL,
+    `retainer` BOOLEAN,
+    `tasks` JSON,
+  CONSTRAINT `fk_{$tablename}_invoices`
+    FOREIGN KEY (invoices_id) REFERENCES `{$db_prefix}invoices` (id)
+    ON DELETE CASCADE
+    ON UPDATE RESTRICT,
+  CONSTRAINT `fk_{$tablename}_clients`
+    FOREIGN KEY (clients_id) REFERENCES `{$db_prefix}clients` (userid)
+    ON DELETE CASCADE
+    ON UPDATE RESTRICT,
+  CONSTRAINT retainer_invoices_pk PRIMARY KEY (id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=\"{$CI->db->char_set}\";");
   }
 }
 
@@ -83,5 +124,23 @@ function client_retainer_init_menu_items()
   ]);
 }
 
+function callback_after_add_task_client_retainer($id)
+{
+  $CI = &get_instance();
+  $CI->load->model(CLIENT_RETAINER_MODULE_NAME . '/Client_retainer_task_model');
+  $CI->Client_retainer_task_model->replace($id);
+}
 
+function callback_after_update_task_client_retainer($id)
+{
+  $CI = &get_instance();
+  $CI->load->model(CLIENT_RETAINER_MODULE_NAME . '/Client_retainer_task_model');
+  $CI->Client_retainer_task_model->replace($id);
+}
 
+function client_retainer_set_task_data($data)
+{
+  $CI = &get_instance();
+  echo '<pre>' . print_r($CI->input->get(), true) . '</pre>';
+  die();
+}

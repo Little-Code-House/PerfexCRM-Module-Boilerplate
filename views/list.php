@@ -24,7 +24,9 @@
           <button class="btn btn-info only-save">
             Save Retained Client
           </button>
-
+          <a class="btn" href="<?= admin_url("client_retainer/process") ?>">
+            Process EoM
+          </a>
           <?php echo form_close(); ?>
         </div>
         <div class="col-md-6">
@@ -71,11 +73,172 @@
         </div>
       </div>
     </div>
-  </div>
-</div>
-<?php init_tail(); ?>
-<script>
-  $(function() {
-    initDataTableInline('.table-retained-clients');
-  });
-</script>
+
+    <?php if (isset($processed)) { ?>
+      <div class="panel_s">
+        <div class="panel-body">
+          <h1>Processed Tasks</h1>
+          <table class="table table-processed-clients">
+            <thead>
+              <tr>
+                <th>
+                  Company
+                </th>
+                <th>
+                  No. of Tasks</th>
+                <th>
+                  Retainer
+                </th>
+                <th>
+                  Invoice No.
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($processed as $row) { ?>
+                <tr>
+                  <td>
+                    <?= $row['client'] ?>
+                  </td>
+                  <td>
+                    <?= $row['tasks'] ?>
+                  </td>
+                  <td>
+                    <?= $row['retainer'] ?>
+                  </td>
+                  <td>
+                    <a href="<?= admin_url("invoices/invoice/{$row['invoice_id']}") ?>">
+                      <?= $row['invoice_number'] ?>
+                    </a>
+                  </td>
+                </tr>
+              <?php } ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <?php } ?>
+
+    <div class="panel_s">
+      <div class="panel-body">
+        <h1>Monthly Invoice Summary</h1>
+        <!-- <pre>
+          <?= print_r($invoices, true) ?>
+        </pre> -->
+        <table class="table table-retainer-invoices">
+          <thead>
+            <tr>
+              <th>
+
+              </th>
+              <?php foreach ($fymonths as $i => $m) { ?>
+                <th>
+                  <?= $months[$m] ?>
+                </th>
+              <?php } ?>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($invoices as $client => $invoiceList) { ?>
+              <tr>
+                <th>
+                  <?= $client ?>
+                </th>
+                <?php foreach ($fymonths as $i => $m) { ?>
+                  <td>
+                    <?php if ($i > array_search((new DateTime())->format('m'), get_fymonths())) {
+                      echo 'Future Date';
+                    } else {
+                      $invoiceFound = false; ?>
+                      <?php foreach ($invoiceList as $invoice) { ?>
+                        <?php if ($m == $invoice->month) {
+                          $invoiceFound = true; ?>
+                          Retainer <?= $invoice->retainer == 1 ? 'Yes' : 'No' ?> <br>
+                          Tasks <?= count(json_decode($invoice->tasks)) ?> <br>
+                          <?php if ($invoice->invoices_id) { ?>
+                            <a href="<?= admin_url("invoices/list_invoices/{$invoice->invoices_id}") ?>">
+                              View Invoice
+                            </a>
+                          <?php } ?>
+                        <?php } ?>
+                      <?php } ?>
+                      <?php if (!$invoiceFound) {
+                        $fyyear = get_fyyear($m); ?>
+                        <a class="btn btn-info" href="<?= admin_url("client_retainer/process?client=$invoice->clients_id&month=$m&year=$fyyear") ?>">
+                          Process
+                        </a>
+                      <?php } ?>
+                    <?php } ?>
+                  </td>
+                <?php } ?>
+              </tr>
+            <?php } ?>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel_s">
+        <div class="panel-body">
+
+        </div>
+      </div>
+
+      <div class="panel_s">
+        <div class="panel-body">
+          <h1>Complete Billable Tasks</h1>
+          <?php foreach ($tasks as $client_id => $taskList) { ?>
+            <table class="table table-billable-tasks">
+              <thead>
+                <tr>
+                  <th style="width:25%">
+                    <?= get_company_name($client_id) ?>
+                  </th>
+                  <th style="width:25%">
+                    Task Name
+                  </th>
+                  <th style="width:12%">
+                    Billable
+                  </th>
+                  <th style="width:12%">
+                    Rate
+                  </th>
+                  <th style="width:25%">
+                    Retainer
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($taskList as $row) { ?>
+                  <tr>
+
+                    <td>
+
+                    </td>
+
+                    <td>
+                      <a href="<?= admin_url("tasks/view/{$row['task_id']}") ?>">
+                        <?= $row['name'] ?>
+                      </a>
+                    </td>
+                    <td>
+                      <?= $row['billable'] ? 'Yes' : 'No' ?>
+                    </td>
+                    <td>
+                      <?= $row['hourly_rate'] ?>
+                    </td>
+                    <td>
+                      <?= get_custom_field_value($row['task_id'], 'tasks_included_in_retainer', 'tasks') ?>
+                    </td>
+                  </tr>
+                <?php } ?>
+              </tbody>
+            </table>
+          <?php } ?>
+        </div>
+      </div>
+      <?php init_tail(); ?>
+      <script>
+        $(function() {
+          initDataTableInline('.table-retained-clients');
+        });
+      </script>

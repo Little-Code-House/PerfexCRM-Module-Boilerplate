@@ -7,6 +7,7 @@ class Client_retainer extends AdminController
 {
   protected $tableName;
   protected $joinTable;
+  protected $retainerInvoiceTable;
 
   const TABLE = 'clients';
 
@@ -15,10 +16,12 @@ class Client_retainer extends AdminController
   {
     $this->tableName = db_prefix() . CLIENT_RETAINER_MODULE_NAME . '_' . self::TABLE;
     $this->joinTable = db_prefix() . 'clients';
+    $this->retainerInvoiceTable =
+      db_prefix() . CLIENT_RETAINER_MODULE_NAME . '_retainer_invoices';
     parent::__construct();
   }
 
-  public function index()
+  function getViewData()
   {
     $CI = &get_instance();
     $CI->load->model('Clients_model');
@@ -26,10 +29,52 @@ class Client_retainer extends AdminController
     $CI->db->select('clients_id, company, rate, hours');
     $CI->db->from($this->tableName);
     $CI->db->join($this->joinTable, "{$this->joinTable}.userid = {$this->tableName}.clients_id");
-    $retained = $this->db->get();
+    $retained = $CI->db->get();
+
+    $financialYear = (date('m') > 6) ? date('Y') + 1 : date('Y');
+
+    $query = $this->db->query(<<<SQL
+        SELECT `company`, `year`, `month`, `tasks`, `retainer`, `invoices_id`, `userid` AS `clients_id`
+FROM (
+SELECT *
+FROM `tblclient_retainer_retainer_invoices`
+WHERE (`month` < 6 AND `year` = $financialYear) OR (`month` > 6 AND `year` = $financialYear - 1)) AS `tblclient_retainer_retainer_invoices`
+RIGHT JOIN `tblclients` ON `tblclients`.`userid` = `tblclient_retainer_retainer_invoices`.`clients_id`
+WHERE `tblclients`.`active` = 1
+ORDER BY `company`;
+SQL);
+
+    $retainerInvoices =
+      $query->result();
+
+    $invoices = [];
+
+    foreach ($retainerInvoices as $i) {
+      $invoices[$i->company][] = $i;
+    }
 
     $this->load->model('Tasks_model');
-    $tasks = $this->Tasks_model->get_billable_tasks();
+    $this->load->model('Clients_model');
+
+    $clients = $this->Clients_model->get(null, ['tblclients.active' => 1]);
+    $this->db->where(['billed' => 0, 'rel_type' => 'customer', 'rel_id !=' => 11]);
+    $tasks = $this->db->get(db_prefix() . 'tasks')->result_array();
+
+    $tasksList = array_map(function ($v) {
+      return [
+        'client_id' => $v['rel_id'],
+        'task_id' => $v['id'],
+        'name' => $v['name'],
+        'hourly_rate' => $v['hourly_rate'],
+        'billable' => $v['billable']
+      ];
+    }, $tasks);
+
+    $tasksTree = [];
+
+    foreach ($tasksList as $t) {
+      $tasksTree[$t['client_id']][] = $t;
+    }
 
 
     $data = [
@@ -39,8 +84,19 @@ class Client_retainer extends AdminController
       'hours' => $this->input->get('hours') ?? null,
       'clients' => $this->Clients_model->get(),
       'retained' => $retained->result(),
-      'tasks' => $tasks
+      'tasks' => $tasksTree,
+      'invoices' => $invoices,
+      'processed' => $this->session->flashdata('processed'),
+      'months' => get_monthnames(),
+      'fymonths' => get_fymonths(),
     ];
+
+    return $data;
+  }
+
+  public function index()
+  {
+    $data = $this->getViewData();
 
     $this->load->view(CLIENT_RETAINER_MODULE_NAME . '/list', $data);
   }
@@ -83,13 +139,18 @@ class Client_retainer extends AdminController
 
   public function process()
   {
+    $data = $this->input->get();
     log_message('debug', 'START RETAINER PROCESSING');
-    $this->load->model('Clients_model');
     $this->load->model('Tasks_model');
     $this->load->model('Invoices_model');
-    $clients = $this->Clients_model->get();
+    $this->db->where(db_prefix() . 'clients.active', 1);
+    if (null != $this->input->get('client')) {
+      $this->db->where(db_prefix() . 'clients.userid', $this->input->get('client'));
+    }
+    $clients = $this->db->get(db_prefix() . 'clients')->result_array();
     $nowDate = new DateTime('now');
     $tax = get_tax_by_id(1);
+    $processed = [];
     foreach ($clients as $client) {
       $invoiceTasks = [];
       $retainerTaskHours = 0;
@@ -98,7 +159,12 @@ class Client_retainer extends AdminController
       $this->db->select('rate, hours');
       $this->db->where(self::TABLE . '_id', $client['userid']);
       $retainer = $this->db->get($this->tableName)->row();
-      $tasks = $this->Tasks_model->get_billable_tasks($client['userid']);
+      if (null !== $this->input->get('month')) {
+        $taskYear =  $this->input->get('year') . '-' . ($this->input->get('month') + 1) . '-' . '01';
+        $tasks = $this->get_billable_tasks_before($client['userid'], $taskYear);
+      } else {
+        $tasks = $this->get_billable_tasks_before($client['userid']);
+      }
       // Process billable tasks
       foreach ($tasks as $task) {
         if ($task['datefinished']) {
@@ -121,14 +187,26 @@ class Client_retainer extends AdminController
 
       //Make Invoice
       if ($retainer || count($invoiceTasks) > 0) {
-        $makeDescription = function ($id) use ($retainerTaskDiscount) {
-          $retainerIncluded = 'This is included in the clients retainer' == get_custom_field_value($id, 'tasks_included_in_retainer', 'tasks');
-          if ($retainerIncluded) {
-            return round(($retainerTaskDiscount * 100)) . '% covered by retainer.';
+        $makeDescription = function ($id) use ($retainerTaskDiscount, $retainer) {
+          if ($retainer) {
+            $retainerIncluded = 'This is included in the clients retainer' == get_custom_field_value($id, 'tasks_included_in_retainer', 'tasks');
+            if ($retainerIncluded) {
+              if ($retainerTaskDiscount < 1) {
+                return '';
+              } else {
+                return '';
+              }
+            } else {
+              return 'Not covered by retainer.  ';
+            }
           } else {
-            return 'Not covered by retainer.  ';
+            return '';
           }
         };
+        $taskRetained =
+          function ($id) {
+            return 'This is included in the clients retainer' == get_custom_field_value($id, 'tasks_included_in_retainer', 'tasks');
+          };
         $invoiceData = [];
         $invoiceData['clientid'] = $client['userid'];
         $invoiceData['number'] = $this->get_next_invoice_number();
@@ -148,7 +226,11 @@ class Client_retainer extends AdminController
         $invoiceData['taxname'] = $tax->name . '|' . $tax->taxrate;
         $invoiceData['newitems'] = [];
         if ($retainer) {
-          $monthName = (clone $nowDate)->modify('first day of next month')->format('F');
+          if (null != $this->input->get('month')) {
+            $monthName = get_monthnames()[$this->input->get('month')];
+          } else {
+            $monthName = $nowDate->format('F');
+          }
           $itemLine = [];
           $itemLine['order'] = '1';
           $itemLine['description'] = $monthName . ' Retainer';
@@ -164,14 +246,14 @@ class Client_retainer extends AdminController
           $itemLine['order'] = $index + 2;
           $itemLine['description'] = $task->name;
           $itemLine['long_description'] = $makeDescription($task->id);
-          $itemLine['qty'] = $task->total_hours;
+          $itemLine['qty'] = $retainerTaskDiscount < 1 || !$taskRetained($task->id) ? $task->total_hours : 1;
           $itemLine['unit'] = null;
-          $itemLine['rate'] = $task->hourly_rate;
+          $itemLine['rate'] = $retainerTaskDiscount < 1 || !$taskRetained($task->id) ? $task->hourly_rate : 0;
           $itemLine['taxname'][] = $tax->name . '|' . $tax->taxrate;
           $invoiceData['newitems'][] = $itemLine;
           $invoiceData['billed_tasks'][$index + 1][] = $task->id;
         }
-        if ($retainerTaskDiscount > 0) {
+        if ($retainerTaskDiscount > 0 && $retainerTaskDiscount < 1) {
           $itemLine = [];
           $itemLine['order'] = '99';
           $itemLine['description'] = 'Work Included In Retainer';
@@ -198,11 +280,34 @@ class Client_retainer extends AdminController
         });
         $invoiceData['total'] = $invoiceData['subtotal'] + $taxesTotal;
 
-        // echo '<pre>' . print_r($invoiceData, true) . '</pre>';
+        $invoiceId = $this->Invoices_model->add($invoiceData);
+        $this->db->select('*');
+        $this->db->where('module_name', 'xero_sync');
+        $this->db->where('active', '1');
+        $xeroActive = $this->db->get(db_prefix() . 'modules')->row();
+        if ($xeroActive) {
+          sleep(5);
+        }
 
-        $this->Invoices_model->add($invoiceData);
+        $processed[] = [
+          'client' => $client['company'],
+          'tasks' => count($tasks),
+          'retainer' => is_null($retainer) ? 'No' : 'Yes',
+          'invoice_number' => format_invoice_number($invoiceId),
+          'invoice_id' => $invoiceId
+        ];
       }
+      $this->db->insert($this->retainerInvoiceTable, [
+        'invoices_id' => $invoiceId ?? null,
+        'clients_id' => $client['userid'],
+        'year' => $this->input->get('year') ?? $nowDate->format('Y'),
+        'month' => $this->input->get('month') ?? $nowDate->format('m'),
+        'retainer' => !is_null($retainer) ?? false,
+        'tasks' => json_encode(array_map(fn ($t) => $t->id, $invoiceTasks) ?? [])
+      ]);
     }
+    $this->session->set_flashdata('processed', $processed);
+    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME));
   }
 
   function get_next_invoice_number()
@@ -254,5 +359,64 @@ class Client_retainer extends AdminController
     }
 
     return str_pad($__number, get_option('number_padding_prefixes'), '0', STR_PAD_LEFT);
+  }
+
+  function get_billable_tasks_before($customer_id = false, $date = '')
+  {
+    $has_permission_view = has_permission('tasks', '', 'view');
+    $noPermissionsQuery  = get_tasks_where_string(false);
+
+    $this->db->where('billable', 1);
+    $this->db->where('billed', 0);
+    $this->db->where('rel_type != "project"');
+
+    if ($date != '') {
+      $this->db->where('startdate <', $date);
+    }
+
+    if ($customer_id != false) {
+      $this->db->where(
+        '
+                (
+                (rel_id IN (SELECT id FROM ' . db_prefix() . 'invoices WHERE clientid=' . $this->db->escape_str($customer_id) . ') AND rel_type="invoice")
+                OR
+                (rel_id IN (SELECT id FROM ' . db_prefix() . 'estimates WHERE clientid=' . $this->db->escape_str($customer_id) . ') AND rel_type="estimate")
+                OR
+                (rel_id IN (SELECT id FROM ' . db_prefix() . 'contracts WHERE client=' . $this->db->escape_str($customer_id) . ') AND rel_type="contract")
+                OR
+                ( rel_id IN (SELECT ticketid FROM ' . db_prefix() . 'tickets WHERE userid=' . $this->db->escape_str($customer_id) . ') AND rel_type="ticket")
+                OR
+                (rel_id IN (SELECT id FROM ' . db_prefix() . 'expenses WHERE clientid=' . $this->db->escape_str($customer_id) . ') AND rel_type="expense")
+                OR
+                (rel_id IN (SELECT id FROM ' . db_prefix() . 'proposals WHERE rel_id=' . $this->db->escape_str($customer_id) . ' AND rel_type="customer") AND rel_type="proposal")
+                OR
+                (rel_id IN (SELECT userid FROM ' . db_prefix() . 'clients WHERE userid=' . $this->db->escape_str($customer_id) . ') AND rel_type="customer")
+                )'
+      );
+    }
+
+    if (!$has_permission_view) {
+      $this->db->where($noPermissionsQuery);
+    }
+
+    $tasks = $this->db->get(db_prefix() . 'tasks')->result_array();
+
+    $i = 0;
+    foreach ($tasks as $task) {
+      $task_rel_data         = get_relation_data($task['rel_type'], $task['rel_id']);
+      $task_rel_value        = get_relation_values($task_rel_data, $task['rel_type']);
+      $tasks[$i]['rel_name'] = $task_rel_value['name'];
+      if (total_rows(db_prefix() . 'taskstimers', [
+        'task_id' => $task['id'],
+        'end_time' => null,
+      ]) > 0) {
+        $tasks[$i]['started_timers'] = true;
+      } else {
+        $tasks[$i]['started_timers'] = false;
+      }
+      $i++;
+    }
+
+    return $tasks;
   }
 }
