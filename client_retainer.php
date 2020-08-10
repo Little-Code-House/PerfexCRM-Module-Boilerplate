@@ -116,7 +116,7 @@ function client_retainer_init_menu_items()
   $CI = &get_instance();
   $CI->app_menu->add_sidebar_menu_item('client_retainer', [
     'name'     => 'Retained Clients',
-    'href'     => admin_url('client_retainer'),
+    'href'     => admin_url('client_retainer/list'),
     'position' => 30,
     'icon'     => 'fa fa-list',
   ]);

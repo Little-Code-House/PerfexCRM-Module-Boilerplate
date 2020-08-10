@@ -1,4 +1,18 @@
-body {
-  background: blue; }
+.table-billable-tasks thead tr th {
+  background: #626f80;
+  color: white; }
+
+.table-billable-tasks tbody tr:nth-child(even) {
+  background: #f2f2f2; }
+
+.table-retainer-invoices thead tr th {
+  background: #626f80;
+  color: white; }
+
+.table-retainer-invoices tbody tr:nth-child(even) {
+  background: #f2f2f2; }
+
+.table-retained-clients tbody tr:nth-child(even) {
+  background: #f2f2f2; }
 
 /*# sourceMappingURL=style.css.map */

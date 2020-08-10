@@ -55,3 +55,11 @@ function get_fyyear($month)
     }
   }
 }
+
+function get_custom_field_id_from_slug($slug)
+{
+  $CI = &get_instance();
+  $CI->db->where('slug', $slug);
+  $row = $CI->db->get(db_prefix() . 'customfields')->row();
+  return $row->id;
+}

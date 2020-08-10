@@ -66,7 +66,8 @@ SQL);
         'task_id' => $v['id'],
         'name' => $v['name'],
         'hourly_rate' => $v['hourly_rate'],
-        'billable' => $v['billable']
+        'billable' => $v['billable'],
+        'status' => get_task_status_by_id($v['status'])
       ];
     }, $tasks);
 
@@ -89,14 +90,47 @@ SQL);
       'processed' => $this->session->flashdata('processed'),
       'months' => get_monthnames(),
       'fymonths' => get_fymonths(),
+      'retainerOptions' => [
+        [
+          'value' => 'This is included in the clients retainer',
+          'label' => 'This is included in the clients retainer'
+        ],
+        [
+          'value' => 'This is NOT included in the clients retainer',
+          'label' => 'This is NOT included in the clients retainer'
+        ]
+      ],
+      'statusOptions' => [
+        [
+          'value' => 1,
+          'label' => 'Not Started'
+        ], [
+          'value' => 2,
+          'label' => 'Awaiting Feedback'
+        ],
+        [
+          'value' => 3,
+          'label' => 'Testing'
+        ],
+        [
+          'value' => 4,
+          'label' => 'In Progress'
+        ],
+        [
+          'value' => 5,
+          'label' => 'Completed'
+        ],
+      ]
     ];
 
     return $data;
   }
 
-  public function index()
+  public function list($tab = null)
   {
     $data = $this->getViewData();
+
+    $data['tab'] = $tab ?? 'retainer';
 
     $this->load->view(CLIENT_RETAINER_MODULE_NAME . '/list', $data);
   }
@@ -111,7 +145,7 @@ SQL);
       'hours' => $data['hours']
     ]);
 
-    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME));
+    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME . '/list'));
   }
 
   public function edit()
@@ -124,7 +158,7 @@ SQL);
       'hours' => $data['hours']
     ]);
 
-    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME));
+    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME) . '/list');
   }
 
   public function delete()
@@ -134,7 +168,30 @@ SQL);
     $this->db->where(self::TABLE . '_id', $data['client_id']);
     $this->db->delete($this->tableName);
 
-    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME));
+    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME) . '/list');
+  }
+
+  public function tasks($task_id = null)
+  {
+    $CI = &get_instance();
+    $data = $this->input->post();
+    $update_task = function ($task) {
+      if (isset($task['custom_fields'])) {
+        $custom_fields = $task['custom_fields'];
+        handle_custom_fields_post($task['id'], $custom_fields);
+        unset($task['custom_fields']);
+      }
+      $this->db->where('id', $task['id']);
+      $this->db->update(db_prefix() . 'tasks', $task);
+    };
+    if ($task_id) {
+      $update_task($data['tasks'][$task_id]);
+    } else {
+      foreach ($data['tasks'] as $id => $task) {
+        $update_task($task);
+      }
+    }
+    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME) . "/list/tasks#$task_id");
   }
 
   public function process()
@@ -170,7 +227,6 @@ SQL);
         if ($task['datefinished']) {
           $taskData = $this->Tasks_model->get_billable_task_data($task['id']);
           $invoiceTasks[] = $taskData;
-          $data = $this->Tasks_model->get_billable_task_data($task['id']);
           $retainerIncluded = 'This is included in the clients retainer' == get_custom_field_value($task['id'], 'tasks_included_in_retainer', 'tasks');
           if ($retainerIncluded) {
             $retainerTaskHours += $taskData->total_hours;
@@ -307,7 +363,7 @@ SQL);
       ]);
     }
     $this->session->set_flashdata('processed', $processed);
-    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME));
+    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME) . '/list');
   }
 
   function get_next_invoice_number()
