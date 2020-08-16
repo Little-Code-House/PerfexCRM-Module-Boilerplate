@@ -58,7 +58,22 @@ SQL);
 
     $clients = $this->Clients_model->get(null, ['tblclients.active' => 1]);
     $this->db->where(['billed' => 0, 'rel_type' => 'customer', 'rel_id !=' => 11]);
+    $this->db->join(db_prefix() . 'clients', 'userid = rel_id');
+    $this->db->order_by('company', 'ASC');
     $tasks = $this->db->get(db_prefix() . 'tasks')->result_array();
+
+    $this->db->where(['billed' => 0, 'rel_type' => null, 'rel_id' => null]);
+    $unattachedTasks = $this->db->get(db_prefix() . 'tasks')->result_array();
+
+    $unattachedList = array_map(function ($v) {
+      return [
+        'task_id' => $v['id'],
+        'name' => $v['name'],
+        'hourly_rate' => $v['hourly_rate'],
+        'billable' => $v['billable'],
+        'status' => get_task_status_by_id($v['status'])
+      ];
+    }, $unattachedTasks);
 
     $tasksList = array_map(function ($v) {
       return [
@@ -86,6 +101,7 @@ SQL);
       'clients' => $this->Clients_model->get(),
       'retained' => $retained->result(),
       'tasks' => $tasksTree,
+      'unattached_tasks' => $unattachedList,
       'invoices' => $invoices,
       'processed' => $this->session->flashdata('processed'),
       'months' => get_monthnames(),
@@ -194,6 +210,20 @@ SQL);
     redirect(admin_url(CLIENT_RETAINER_MODULE_NAME) . "/list/tasks#$task_id");
   }
 
+  public function rollback()
+  {
+    // $this->load->model('invoices_model');
+    // for ($i=270; $i < 320; $i++) {
+    //   if ($i != 296) {
+    //     $this->invoices_model->delete($i);
+    //   echo $i . ' deleted. <br>';
+    //   log_message('error', $i . ' deleted.');
+    //   }
+    //   sleep(2);
+    // }
+    // die();
+  }
+
   public function process()
   {
     $data = $this->input->get();
@@ -273,7 +303,7 @@ SQL);
         $invoiceData['billing_country'] = $client['billing_country'];
         $invoiceData['show_shipping_on_invoice'] = 'off';
         $invoiceData['date'] = $nowDate->format('d/m/Y');
-        $invoiceData['duedate'] = (clone $nowDate)->modify('first day of next month')->add(new DateInterval('P6D'))->format('d/m/Y');
+        $invoiceData['duedate'] = (clone $nowDate)->add(new DateInterval('P14D'))->format('d/m/Y');
         $invoiceData['allowed_payment_modes'] = [];
         $invoiceData['allowed_payment_modes'][] = '1';
         $invoiceData['allowed_payment_modes'][] = 'stripe';

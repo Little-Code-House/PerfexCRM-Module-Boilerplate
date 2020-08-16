@@ -17,9 +17,11 @@
   <button class="btn btn-info only-save">
     Save Retained Client
   </button>
-  <a class="btn" href="<?= admin_url("client_retainer/process") ?>">
+  <?php if (is_admin()) { ?>
+    <a class="btn" href="<?= admin_url("client_retainer/process") ?>">
     Process EoM
   </a>
+  <?php } ?>
   <?php echo form_close(); ?>
 </div>
 <div class="col-md-8">

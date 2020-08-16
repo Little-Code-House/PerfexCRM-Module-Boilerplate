@@ -11,6 +11,20 @@
     tr:nth-child(even) {
       background: #f2f2f2;
     }
+
+    tr.invoiced {
+      background: green;
+          
+      td {
+        color: white;
+        a {
+         color:#92ddff;
+        }
+        label {
+          color: white;
+        }
+      }
+    }
   }
 
 }
