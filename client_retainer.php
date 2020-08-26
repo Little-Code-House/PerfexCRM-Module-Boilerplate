@@ -80,6 +80,7 @@ function client_retainer_activation()
     `tasks_id` INT(11) NOT NULL UNIQUE,
     `retainer_included` BOOLEAN NOT NULL,
     `billable` BOOLEAN NOT NULL,
+    'checked' BOOLEAN NOT NULL
   CONSTRAINT `fk_{$tablename}_clients`
     FOREIGN KEY (tasks_id) REFERENCES `{$db_prefix}tasks` (id)
     ON DELETE CASCADE

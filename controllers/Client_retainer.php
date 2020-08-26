@@ -58,31 +58,42 @@ SQL);
 
     $clients = $this->Clients_model->get(null, ['tblclients.active' => 1]);
     $this->db->where(['billed' => 0, 'rel_type' => 'customer', 'rel_id !=' => 11]);
-    $this->db->join(db_prefix() . 'clients', 'userid = rel_id');
+    $this->db->select("*," . db_prefix() . 'tasks.addedfrom AS task_addedfrom');
+    $this->db->join(db_prefix() . 'clients', 'userid = rel_id', 'left');
+    $this->db->join(db_prefix() . CLIENT_RETAINER_MODULE_NAME . '_' . 'tasks', 'tasks_id = id', 'left');
     $this->db->order_by('company', 'ASC');
     $tasks = $this->db->get(db_prefix() . 'tasks')->result_array();
 
+    $this->db->select("*," . db_prefix() . 'tasks.addedfrom AS task_addedfrom');
     $this->db->where(['billed' => 0, 'rel_type' => null, 'rel_id' => null]);
+    $this->db->join(db_prefix() . CLIENT_RETAINER_MODULE_NAME . '_' . 'tasks', 'tasks_id = id', 'left');
     $unattachedTasks = $this->db->get(db_prefix() . 'tasks')->result_array();
 
     $unattachedList = array_map(function ($v) {
+      $created_by = get_staff($v['task_addedfrom']);
       return [
         'task_id' => $v['id'],
         'name' => $v['name'],
         'hourly_rate' => $v['hourly_rate'],
         'billable' => $v['billable'],
-        'status' => get_task_status_by_id($v['status'])
+        'status' => $v['status'],
+        'created_by' => $created_by->firstname . ' ' . $created_by->lastname,
+        'checked' => $v['checked']
       ];
     }, $unattachedTasks);
 
     $tasksList = array_map(function ($v) {
+      $created_by = get_staff($v['task_addedfrom']);
+
       return [
         'client_id' => $v['rel_id'],
         'task_id' => $v['id'],
         'name' => $v['name'],
         'hourly_rate' => $v['hourly_rate'],
         'billable' => $v['billable'],
-        'status' => get_task_status_by_id($v['status'])
+        'status' => $v['status'],
+        'created_by' => $created_by->firstname . ' ' . $created_by->lastname,
+        'checked' => $v['checked']
       ];
     }, $tasks);
 
@@ -189,7 +200,7 @@ SQL);
 
   public function tasks($task_id = null)
   {
-    $CI = &get_instance();
+    $this->load->model('client_retainer_task_model');
     $data = $this->input->post();
     $update_task = function ($task) {
       if (isset($task['custom_fields'])) {
@@ -200,13 +211,33 @@ SQL);
       $this->db->where('id', $task['id']);
       $this->db->update(db_prefix() . 'tasks', $task);
     };
-    if ($task_id) {
-      $update_task($data['tasks'][$task_id]);
-    } else {
-      foreach ($data['tasks'] as $id => $task) {
-        $update_task($task);
-      }
-    }
+
+    $update_task($data['task']);
+    $this->client_retainer_task_model->replace($task_id);
+
+
+    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME) . "/list/tasks#$task_id");
+  }
+
+  public function check($task_id)
+  {
+    $tableName = db_prefix() . CLIENT_RETAINER_MODULE_NAME . '_' . 'tasks';
+
+    $this->db->where('tasks_id', $task_id);
+    $this->db->update($tableName, [
+      'checked' => 1
+    ]);
+    redirect(admin_url(CLIENT_RETAINER_MODULE_NAME) . "/list/tasks#$task_id");
+  }
+
+  public function uncheck($task_id)
+  {
+    $tableName = db_prefix() . CLIENT_RETAINER_MODULE_NAME . '_' . 'tasks';
+
+    $this->db->where('tasks_id', $task_id);
+    $this->db->update($tableName, [
+      'checked' => 0
+    ]);
     redirect(admin_url(CLIENT_RETAINER_MODULE_NAME) . "/list/tasks#$task_id");
   }
 

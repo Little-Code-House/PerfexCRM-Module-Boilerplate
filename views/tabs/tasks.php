@@ -1,14 +1,13 @@
-          <?php echo form_open(admin_url('client_retainer/tasks')); ?>
           <h1>Tasks</h1>
-          <button class="btn btn-info only-save">
-            Save Tasks
-          </button>
 
           <table class="table table-billable-tasks" style="table-layout: fixed;">
             <thead>
               <tr>
-                <th style="width:50%">
+                <th style="width:30%">
                   Unattached Tasks
+                </th>
+                <th style="width:20%">
+                  Created By
                 </th>
                 <th style="width:50%">
                   Task Name
@@ -35,13 +34,29 @@
             </thead>
             <tbody>
               <?php foreach ($unattached_tasks as $row) { ?>
-                <tr id="<?= $row['task_id'] ?>" class="<?= $row['status']['id'] == 5 && $row['billable'] ? 'invoiced' : '' ?>">
+                <?php echo form_open(admin_url("client_retainer/tasks/{$row['task_id']}")); ?>
+                <tr id="<?= $row['task_id'] ?>" class="<?= $row['status'] == 5 && $row['billable'] ? 'invoiced' : '' ?>">
 
                   <td>
-                    <button class="btn btn-info only-save" formaction='<?= admin_url("client_retainer/tasks/{$row['task_id']}") ?>'>
+                    <button class="btn btn-info only-save">
                       Save
                     </button>
-                    <?php echo render_input("tasks[{$row['task_id']}][id]", null, $row['task_id'], 'hidden'); ?>
+                    <?php if ($row['checked']) { ?>
+                      <a class="btn btn-info only-save" style="background-color: green" href='<?= admin_url("client_retainer/uncheck/{$row['task_id']}") ?>'>
+                        Checked
+                      </a>
+                    <?php } else { ?>
+                      <a class="btn btn-info only-save" style="background-color: purple" href='<?= admin_url("client_retainer/check/{$row['task_id']}") ?>'>
+                        Unchecked
+                      </a>
+                    <?php } ?>
+
+
+                    <?php echo render_input("task[id]", null, $row['task_id'], 'hidden'); ?>
+                  </td>
+
+                  <td>
+                    <?= $row['created_by'] ?>
                   </td>
 
                   <td>
@@ -50,24 +65,33 @@
                     </a>
                   </td>
                   <td>
-                    <?= render_select("tasks[{$row['task_id']}][status]", $statusOptions, array('value', 'label'), null, $row['status']['id'], array(), array(), '', '', false) ?>
+                    <div class="form-group">
+                      <select name="task[status]" data-width="100%">
+                        <?php
+                        foreach ($statusOptions as $option) { ?>
+                          <option value="<?= $option['value'] ?>" <?= $option['value'] == $row['status'] ? 'selected' : '' ?>><?= $option['label'] ?></option>
+                        <?php
+                        }
+                        ?>
+                      </select>
+                    </div>
                   </td>
                   <td>
                     <div class="form-group">
                       <div class="radio radio-primary radio-inline">
-                        <input type="radio" id="tasks[<?= $row['task_id'] ?>][billable]" name="tasks[<?= $row['task_id'] ?>][billable]" value="1" <?= $row['billable'] ? 'checked' : '' ?>>
+                        <input type="radio" name="task[custom_fields][tasks][<?= get_custom_field_id_from_slug('tasks_is_this_a_billable_retainer_task') ?>]" value="Yes" <?= $row['billable'] ? 'checked' : '' ?>>
                         <label for="tasks[<?= $row['task_id'] ?>][billable]">
                           Yes </label>
                       </div>
                       <div class="radio radio-primary radio-inline">
-                        <input type="radio" id="tasks[<?= $row['task_id'] ?>][billable]" name="tasks[<?= $row['task_id'] ?>][billable]" value="0" <?= $row['billable'] ? '' : 'checked' ?>>
+                        <input type="radio" name="task[custom_fields][tasks][<?= get_custom_field_id_from_slug('tasks_is_this_a_billable_retainer_task') ?>]" value="No" <?= $row['billable'] ? '' : 'checked' ?>>
                         <label for="tasks[<?= $row['task_id'] ?>][billable]">
                           No </label>
                       </div>
                     </div>
                   </td>
                   <td>
-                    <?= render_input("tasks[{$row['task_id']}][hourly_rate]", null, $row['hourly_rate'], 'text', array(), array(), ''); ?>
+                    <?= render_input("task[hourly_rate]", null, $row['hourly_rate'], 'text', array(), array(), ''); ?>
                   </td>
                   <td>
                     <?= $this->Tasks_model->get_billable_task_data($row['task_id'])->total_hours ?>
@@ -76,12 +100,19 @@
                     $<?= $this->Tasks_model->get_billable_task_data($row['task_id'])->total_hours * $row['hourly_rate'] ?>
                   </td>
                   <td>
-                    <?php
-                    $field_id = get_custom_field_id_from_slug('tasks_included_in_retainer');
-                    echo render_select("tasks[{$row['task_id']}][custom_fields][tasks][$field_id]", $retainerOptions, array('value', 'label'), null, get_custom_field_value($row['task_id'], 'tasks_included_in_retainer', 'tasks'), array(), array(), '', '', false);
-                    ?>
+                    <div class="form-group">
+                      <select name="task[custom_fields][tasks][<?= get_custom_field_id_from_slug('tasks_included_in_retainer') ?>]" data-width="100%">
+                        <?php
+                        foreach ($retainerOptions as $option) { ?>
+                          <option value="<?= $option['value'] ?>" <?= $option['value'] == get_custom_field_value($row['task_id'], 'tasks_included_in_retainer', 'tasks') ? 'selected' : '' ?>><?= $option['label'] ?></option>
+                        <?php
+                        }
+                        ?>
+                      </select>
+                    </div>
                   </td>
                 </tr>
+                <?php echo form_close(); ?>
               <?php } ?>
             </tbody>
           </table>
@@ -90,8 +121,11 @@
             <table class="table table-billable-tasks" style="table-layout: fixed;">
               <thead>
                 <tr>
-                  <th style="width:50%">
+                  <th style="width:30%">
                     <?= get_company_name($client_id) ?>
+                  </th>
+                  <th style="width:20%">
+                    Created By
                   </th>
                   <th style="width:50%">
                     Task Name
@@ -118,13 +152,27 @@
               </thead>
               <tbody>
                 <?php foreach ($taskList as $row) { ?>
-                  <tr id="<?= $row['task_id'] ?>" class="<?= $row['status']['id'] == 5 && $row['billable'] ? 'invoiced' : '' ?>">
+                  <?php echo form_open(admin_url("client_retainer/tasks/{$row['task_id']}")); ?>
+                  <tr id="<?= $row['task_id'] ?>" class="<?= $row['status'] == 5 && $row['billable'] ? 'invoiced' : '' ?>">
 
                     <td>
-                      <button class="btn btn-info only-save" formaction='<?= admin_url("client_retainer/tasks/{$row['task_id']}") ?>'>
+                      <button class="btn btn-info only-save">
                         Save
                       </button>
+                      <?php if ($row['checked']) { ?>
+                        <a class="btn btn-info only-save" style="background-color: green" href='<?= admin_url("client_retainer/uncheck/{$row['task_id']}") ?>'>
+                          Checked
+                        </a>
+                      <?php } else { ?>
+                        <a class="btn btn-info only-save" style="background-color: purple" href='<?= admin_url("client_retainer/check/{$row['task_id']}") ?>'>
+                          Unchecked
+                        </a>
+                      <?php } ?>
                       <?php echo render_input("tasks[{$row['task_id']}][id]", null, $row['task_id'], 'hidden'); ?>
+                    </td>
+
+                    <td>
+                      <?= $row['created_by'] ?>
                     </td>
 
                     <td>
@@ -133,17 +181,26 @@
                       </a>
                     </td>
                     <td>
-                      <?= render_select("tasks[{$row['task_id']}][status]", $statusOptions, array('value', 'label'), null, $row['status']['id'], array(), array(), '', '', false) ?>
+                      <div class="form-group">
+                        <select name="task[status]" data-width="100%">
+                          <?php
+                          foreach ($statusOptions as $option) { ?>
+                            <option value="<?= $option['value'] ?>" <?= $option['value'] == $row['status'] ? 'selected' : '' ?>><?= $option['label'] ?></option>
+                          <?php
+                          }
+                          ?>
+                        </select>
+                      </div>
                     </td>
                     <td>
                       <div class="form-group">
                         <div class="radio radio-primary radio-inline">
-                          <input type="radio" id="tasks[<?= $row['task_id'] ?>][billable]" name="tasks[<?= $row['task_id'] ?>][billable]" value="1" <?= $row['billable'] ? 'checked' : '' ?>>
+                          <input type="radio" id="tasks[<?= $row['task_id'] ?>][billable]_yes" name="tasks[<?= $row['task_id'] ?>][custom_fields][tasks][<?= get_custom_field_id_from_slug('tasks_is_this_a_billable_retainer_task') ?>]" value="Yes" <?= $row['billable'] ? 'checked' : '' ?>>
                           <label for="tasks[<?= $row['task_id'] ?>][billable]">
                             Yes </label>
                         </div>
                         <div class="radio radio-primary radio-inline">
-                          <input type="radio" id="tasks[<?= $row['task_id'] ?>][billable]" name="tasks[<?= $row['task_id'] ?>][billable]" value="0" <?= $row['billable'] ? '' : 'checked' ?>>
+                          <input type="radio" id="tasks[<?= $row['task_id'] ?>][billable]_no" name="tasks[<?= $row['task_id'] ?>][custom_fields][tasks][<?= get_custom_field_id_from_slug('tasks_is_this_a_billable_retainer_task') ?>]" value="No" <?= $row['billable'] ? '' : 'checked' ?>>
                           <label for="tasks[<?= $row['task_id'] ?>][billable]">
                             No </label>
                         </div>
@@ -159,14 +216,20 @@
                       $<?= $this->Tasks_model->get_billable_task_data($row['task_id'])->total_hours * $row['hourly_rate'] ?>
                     </td>
                     <td>
-                      <?php
-                      $field_id = get_custom_field_id_from_slug('tasks_included_in_retainer');
-                      echo render_select("tasks[{$row['task_id']}][custom_fields][tasks][$field_id]", $retainerOptions, array('value', 'label'), null, get_custom_field_value($row['task_id'], 'tasks_included_in_retainer', 'tasks'), array(), array(), '', '', false);
-                      ?>
+                      <div class="form-group">
+                        <select name="task[custom_fields][tasks][<?= get_custom_field_id_from_slug('tasks_included_in_retainer') ?>]" data-width="100%">
+                          <?php
+                          foreach ($retainerOptions as $option) { ?>
+                            <option value="<?= $option['value'] ?>" <?= $option['value'] == get_custom_field_value($row['task_id'], 'tasks_included_in_retainer', 'tasks') ? 'selected' : '' ?>><?= $option['label'] ?></option>
+                          <?php
+                          }
+                          ?>
+                        </select>
+                      </div>
                     </td>
                   </tr>
+                  <?php echo form_close(); ?>
                 <?php } ?>
               </tbody>
             </table>
           <?php } ?>
-          <?php echo form_close(); ?>

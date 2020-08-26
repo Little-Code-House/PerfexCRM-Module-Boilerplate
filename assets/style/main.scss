@@ -1,7 +1,7 @@
 .table-billable-tasks {
   thead {
     tr {
-      th{
+      th {
         background: #626f80;
         color: white;
       }
@@ -13,26 +13,15 @@
     }
 
     tr.invoiced {
-      background: green;
-          
-      td {
-        color: white;
-        a {
-         color:#92ddff;
-        }
-        label {
-          color: white;
-        }
-      }
+      background: rgb(164, 245, 164);
     }
   }
-
 }
 
 .table-retainer-invoices {
   thead {
     tr {
-      th{
+      th {
         background: #626f80;
         color: white;
       }

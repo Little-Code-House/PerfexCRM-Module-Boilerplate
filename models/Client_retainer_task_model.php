@@ -27,7 +27,8 @@ class Client_retainer_task_model extends App_Model
     $this->db->replace($this->tableName, [
       'tasks_id' => $id,
       'retainer_included' => $retainerIncluded,
-      'billable' => $billable
+      'billable' => $billable,
+      'checked' => 0
     ]);
 
     $data = ['billable' => $billable];
